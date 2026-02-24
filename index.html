@@ -119,7 +119,7 @@
         // CONFIGURATION
         // ==========================================
         // GANTI URL INI DENGAN URL WEB APP GAS KAMU YANG BARU (AKHIRAN /exec)
-        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwOaM206KqI_b5wQxS3yv1_ZtJqE_n2wL6v4u8xK9pY4z8A/exec";
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbztbQh1W0hzEyvAU6FEdKm78vp8gZpSrq3XxYHRDZ1e3o8hiwlCWVR12fFJZTQ8b41TsQ/exec";
 
         let html5QrcodeScanner = null;
         let studentId = "";
@@ -212,7 +212,7 @@
                         method: 'POST',
                         body: JSON.stringify(payload),
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'text/plain;charset=utf-8'
                         }
                     });
 
