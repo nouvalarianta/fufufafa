@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Scanner Presensi Vercel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            padding: 1rem;
+            background: #f4f4f9;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            margin: auto;
+        }
+
+        #reader {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status-text {
+            margin-top: 15px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .error {
+            color: #dc3545;
+        }
+
+        .success {
+            color: #28a745;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 2s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+
+<body>
+
+    <div class="card" id="login-container">
+        <h2>Presensi Mahasiswa</h2>
+        <p>Silakan masukkan identitas diri sebelum scan QR.</p>
+
+        <label for="uid" style="display:block; text-align:left; margin-bottom:5px;">NIM / User ID</label>
+        <input type="text" id="uid" placeholder="Contoh: 20230001">
+
+        <button onclick="startScanning()" id="btn-start">Mulai Scan QR</button>
+        <div id="init-status"></div>
+    </div>
+
+    <div class="card" id="scan-container" style="display:none;">
+        <h2>Arahkan Kamera ke QR Code</h2>
+        <div id="reader"></div>
+        <div id="status-text"></div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
+        // GANTI URL INI DENGAN URL WEB APP GAS KAMU YANG BARU (AKHIRAN /exec)
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwOaM206KqI_b5wQxS3yv1_ZtJqE_n2wL6v4u8xK9pY4z8A/exec";
+
+        let html5QrcodeScanner = null;
+        let studentId = "";
+        let deviceId = "";
+        let currentLat = null;
+        let currentLng = null;
+
+        function getOrCreateDeviceId() {
+            let did = localStorage.getItem('presensi_device_id');
+            if (!did) {
+                did = 'dev-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('presensi_device_id', did);
+            }
+            return did;
+        }
+
+        function getGPSLocation() {
+            return new Promise((resolve) => {
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        position => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+                        error => { console.warn("GPS error:", error); resolve({ lat: null, lng: null }); },
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    );
+                } else {
+                    resolve({ lat: null, lng: null });
+                }
+            });
+        }
+
+        async function startScanning() {
+            const uidInput = document.getElementById('uid').value.trim();
+            if (!uidInput) {
+                alert("Harap masukkan NIM / User ID Anda!");
+                return;
+            }
+            studentId = uidInput;
+            deviceId = getOrCreateDeviceId();
+
+            const btn = document.getElementById('btn-start');
+            btn.innerHTML = '<span class="loader"></span>Menyiapkan Kamera & GPS...';
+            btn.disabled = true;
+
+            const gps = await getGPSLocation();
+            currentLat = gps.lat;
+            currentLng = gps.lng;
+
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('scan-container').style.display = 'block';
+
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false
+            );
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }
+
+        async function onScanSuccess(decodedText) {
+            if (!decodedText.startsWith("TKN-")) return;
+
+            html5QrcodeScanner.clear().then(async () => {
+                document.getElementById('reader').style.display = 'none';
+
+                const statusEl = document.getElementById('status-text');
+                statusEl.innerHTML = '<span class="loader"></span>Mengirim data kehadiran...';
+                statusEl.className = "";
+
+                const payload = {
+                    user_id: studentId,
+                    device_id: deviceId,
+                    course_id: "cloud-101",
+                    session_id: "sesi-02",
+                    qr_token: decodedText,
+                    ts: new Date().toISOString(),
+                    gps_lat: currentLat,
+                    gps_lng: currentLng
+                };
+
+                // Standalone Fetch API untuk memanggil backend Apps Script
+                try {
+                    // Tambahkan query parameter ?path=presence/checkin ke URL eksekusi GAS
+                    const endpointUrl = GAS_WEB_APP_URL + "?path=presence/checkin";
+
+                    const fetchResponse = await fetch(endpointUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                        // Tanpa mode khusus di sini agar browser menangani redirect 302 standar GAS
+                    });
+
+                    const responseData = await fetchResponse.json();
+
+                    if (responseData.ok) {
+                        statusEl.innerHTML = `✅ <b>Presensi Berhasil!</b><br>ID: ${responseData.data.presence_id}<br>Terima kasih.`;
+                        statusEl.className = "success";
+                    } else {
+                        let errMsg = responseData.error;
+                        if (errMsg === "token_already_used") errMsg = "Gagal: QR Code ini sudah pernah digunakan.";
+                        if (errMsg === "token_expired") errMsg = "Gagal: QR Code sudah kedaluwarsa (Lewat >2 Menit).";
+                        if (errMsg === "token_invalid") errMsg = "Gagal: QR Code salah atau tidak valid.";
+
+                        statusEl.innerHTML = `❌ ${errMsg}`;
+                        statusEl.className = "error";
+                    }
+                } catch (error) {
+                    console.error(error);
+                    statusEl.innerHTML = `❌ Gagal memanggil sistem. Coba Scan Ulang. (Error: CORS/Network)`;
+                    statusEl.className = "error";
+                }
+
+            }).catch(err => console.error(err));
+        }
+
+        function onScanFailure(error) {
+            // Abaikan karena kamera mengecek gambar setiap ms secara terus menerus
+        }
+    </script>
+</body>
+
+</html>
