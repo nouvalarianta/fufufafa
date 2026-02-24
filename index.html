@@ -171,7 +171,11 @@
             document.getElementById('scan-container').style.display = 'block';
 
             html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false
+                "reader", {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                videoConstraints: { facingMode: "environment" }
+            }, false
             );
             html5QrcodeScanner.render(onScanSuccess, onScanFailure);
         }
@@ -202,10 +206,14 @@
                     // Tambahkan query parameter ?path=presence/checkin ke URL eksekusi GAS
                     const endpointUrl = GAS_WEB_APP_URL + "?path=presence/checkin";
 
+                    // GAS Web Apps have strict CORS when fetching via JSON POST. 
+                    // Using text/plain allows Simple Request, circumventing CORS preflight block.
                     const fetchResponse = await fetch(endpointUrl, {
                         method: 'POST',
-                        body: JSON.stringify(payload)
-                        // Tanpa mode khusus di sini agar browser menangani redirect 302 standar GAS
+                        body: JSON.stringify(payload),
+                        headers: {
+                            'Content-Type': 'text/plain;charset=utf-8'
+                        }
                     });
 
                     const responseData = await fetchResponse.json();
